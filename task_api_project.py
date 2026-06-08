@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException, status
 import time
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
-
+from database import init_db
+from models import Task
+from contextlib import asynccontextmanager
 task_list = {
     1 : {
         "descp" : "Work out",
@@ -10,8 +12,13 @@ task_list = {
         "status" : "To-do"
     }
 }
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
-app = FastAPI(title="Task Management API")
+app = FastAPI(title="Task Management API",lifespan=lifespan)
+
 
 class TaskCreate(BaseModel):
     descp : str = Field(..., max_length=30)
