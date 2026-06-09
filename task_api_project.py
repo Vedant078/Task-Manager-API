@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status,Depends
+from sqlmodel import Session,select
+from database import get_session
 import time
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
@@ -39,34 +41,29 @@ def welcome():
         "timestamp": time.ctime()
     }
 
-@app.get("/task/get-tasks")
-def get_all_tasks():
-    return task_list
+@app.get("/task/get-tasks",response_model = list[Task])
+def get_all_tasks(priority : str | None = None, session: Session = Depends(get_session)):
+    statement = select(Task)
+    if priority:
+        statement = statement.where(Task.priority == priority)
+        
+    tasks  = session.exec(statement).all()
+    return tasks
 
-@app.get("/task/get-task/{task_id}")
-def get_task(task_id : int):
-    if task_id not in task_list:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    return task_list[task_id]
+@app.get("/task/get-task/{task_id}", response_model =Task)
+def get_task(task_id : int,session : Session = Depends(get_session)):
+    statement = select(Task).where(Task.id == task_id)
+    task = session.exec(statement).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+    return task
 
-@app.get("/task/filter/{task_status}")
-def filterTasks(task_status: str):
-    filtered_tasks = {}
-    
-    for task_id in task_list:
-        current_task = task_list[task_id]
-        if current_task["status"] == task_status:
-            filtered_tasks[task_id] = current_task
-            
-    return filtered_tasks
-
-@app.post("/task/create-task", status_code=status.HTTP_201_CREATED)
-def create_task(task_id : int, task : TaskCreate):
-    if task_id in task_list:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task ID already exists")
-    
-    task_list[task_id] = task.model_dump()
-    return task_list[task_id]
+@app.post("/task/create-task", response_model = Task)
+def create_task(task: Task, session: Session = Depends(get_session)):
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
 
 @app.patch("/task/update-task/{task_id}")
 def update_task(task_id: int, task: TaskUpdate):
