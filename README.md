@@ -1,90 +1,192 @@
+# Task Manager API
 
-# Task Management REST API Documentation
-
-This documentation provides a precise overview of the Task Management REST API endpoints and configurations based on the project's Postman schema.
-
----
-
-## Environment Configuration
-
-Set the global variable in Postman to map the deployment environment:
-* **`{{baseURL}}`**: `http://127.0.0.1:8000`
+A RESTful API for managing tasks, built with **FastAPI**, **SQLModel**, and **PostgreSQL**.
 
 ---
 
-## API Endpoints Specification
+## Tech Stack
 
-### 1. Welcome Page
-* **Method:** GET
-* **URL:** `{{baseURL}}/`
-* **Description:** Service root index acting as an operational heartbeat check.
+- **FastAPI** — web framework
+- **SQLModel** — ORM + schema validation
+- **PostgreSQL** — database
+- **Pydantic** — request/response validation
+- **Uvicorn** — ASGI server
 
-### 2. Get All Tasks
-* **Method:** GET
-* **URL:** `{{baseURL}}/task/get-tasks`
-* **Description:** Retrieves the global dictionary containing all active task records. 
-* **Note:** Do not add a trailing slash to the path.
+---
 
-### 3. Create Task
-* **Method:** POST
-* **URL:** `{{baseURL}}/task/create-task?task_id=18`
-* **Query Parameter:** `task_id` (Required)
-* **Body (JSON):**
-```json
-{
-    "descp": "Reading",
-    "priority": "High",
-    "status": "In-progress"
-}
+## Project Structure
 
 ```
-
-* **Description:** Enforces schema validation using Pydantic models and provisions a new task database record.
-
-### 4. Get Specific Task
-
-* **Method:** GET
-* **URL:** `{{baseURL}}/task/get-task/32`
-* **Path Parameter:** `task_id`
-* **Description:** Fetches explicit details for a single target item. Raises an HTTP 404 error if the ID does not exist.
-
-### 5. Update Task
-
-* **Method:** PATCH
-* **URL:** `{{baseURL}}/task/update-task/1`
-* **Path Parameter:** `task_id`
-* **Body (JSON):**
-
-```json
-{
-    "descp": "swimming"
-}
-
+API_project/
+├── task_api_project.py   # main app, all route handlers
+├── database.py           # engine, session, db init
+├── models.py             # Task table model
+└── README.md
 ```
 
-* **Description:** Executes runtime-safe partial mutations on existing keys via `.model_dump(exclude_unset=True)`. Unspecified payload fields are left unaltered.
+---
 
-### 6. Delete Task
+## Setup
 
-* **Method:** DELETE
-* **URL:** `{{baseURL}}/task/delete-task/32`
-* **Path Parameter:** `task_id`
-* **Expected Response (JSON):**
+### 1. Clone the repository
 
-```json
-{
-    "message": "Task 32 deleted successfully"
-}
-
+```bash
+git clone https://github.com/Vedant078/Task-Manager-API.git
+cd Task-Manager-API
 ```
 
-* **Description:** Permanently unsets and clears the designated target task from the active database memory.
+### 2. Install dependencies
 
-### 7. Filter Tasks by Status
+```bash
+pip install fastapi sqlmodel psycopg2-binary uvicorn
+```
 
-* **Method:** GET
-* **URL:** `{{baseURL}}/task/filter/To-do`
-* **Path Parameter:** `task_status` (Options: `To-do`, `In-progress`, `Done`)
-* **Description:** Evaluates the active database indices and compiles a response containing only tasks matching the queried state.
+### 3. Create the PostgreSQL database
 
+```bash
+psql -U postgres
+CREATE DATABASE task_db;
+\q
+```
 
+> The app connects to `postgresql://localhost/task_db` by default (`database.py`).  
+> Tables are auto-created on startup via `SQLModel.metadata.create_all()`.
+
+### 4. Run the server
+
+```bash
+uvicorn task_api_project:app --reload
+```
+
+Server runs at: `http://127.0.0.1:8000`
+
+---
+
+## Data Model
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `id` | int | auto-generated primary key |
+| `descp` | str | max 30 characters |
+| `priority` | str | `Low` / `Medium` / `High` |
+| `status` | str | `To-do` / `In-progress` / `Done` |
+
+---
+
+## API Endpoints
+
+### `GET /`
+Health check / welcome message.
+
+**Response:**
+```json
+{
+  "message": "WELCOME to Task API",
+  "developer": "Vedant Limbasiya",
+  "timestamp": "..."
+}
+```
+
+---
+
+### `GET /task/get-tasks`
+Fetch all tasks. Optionally filter by priority.
+
+**Query param:** `priority` (optional) — `Low`, `Medium`, `High`
+
+```
+GET /task/get-tasks
+GET /task/get-tasks?priority=High
+```
+
+---
+
+### `GET /task/get-task/{task_id}`
+Fetch a single task by ID.
+
+```
+GET /task/get-task/1
+```
+
+Returns `404` if task not found.
+
+---
+
+### `POST /task/create-task`
+Create a new task.
+
+**Request body:**
+```json
+{
+  "descp": "Reading",
+  "priority": "High",
+  "status": "In-progress"
+}
+```
+
+> `priority` defaults to `Medium`, `status` defaults to `To-do` if omitted.
+
+---
+
+### `PATCH /task/update-task/{task_id}`
+Partially update an existing task. Only send fields you want to change.
+
+```
+PATCH /task/update-task/1
+```
+
+**Request body:**
+```json
+{
+  "descp": "Swimming"
+}
+```
+
+Returns `404` if task not found.
+
+---
+
+### `DELETE /task/delete-task/{task_id}`
+Delete a task by ID.
+
+```
+DELETE /task/delete-task/1
+```
+
+**Response:**
+```json
+{
+  "message": "Task 1 deleted successfully"
+}
+```
+
+Returns `404` if task not found.
+
+---
+
+### `GET /task/filter/{task_status}`  *(via get-tasks query param)*
+Filter tasks by status.
+
+```
+GET /task/get-tasks   (extend with status filter if needed)
+```
+
+> Currently status filtering is handled through the `get-tasks` endpoint with priority filter. Status filter can be added similarly.
+
+---
+
+## Testing with Postman
+
+Set a Postman environment variable:
+
+| Variable | Value |
+|----------|-------|
+| `baseURL` | `http://127.0.0.1:8000` |
+
+Then use `{{baseURL}}/task/get-tasks`, `{{baseURL}}/task/create-task`, etc.
+
+---
+
+## Developer
+
+**Vedant Limbasiya** — [GitHub](https://github.com/Vedant078)
